@@ -7,7 +7,7 @@
     <title>RDO</title>
 
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-    <script src="obras.js"></script>
+
 
     <style>
         :root {
@@ -541,9 +541,7 @@
             </div>
         </div>
 
-        <button id="btnBaixarJS" class="btn-save-js" onclick="baixarArquivoJS()">
-            ⚠️ Obras novas na memória! Baixar "obras.js" atualizado.
-        </button>
+
     </div>
 
     <div id="pdf-content">
@@ -638,18 +636,283 @@
         <button class="btn-pdf" onclick="imprimirPDF()">📄 GERAR PDF</button>
     </div>
 
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Configuração do Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBVn3wD_JvZpE4OVzWRDaMv6Mv47gUGRH0",
+            authDomain: "diarioobraapp-3c424.firebaseapp.com",
+            projectId: "diarioobraapp-3c424",
+            storageBucket: "diarioobraapp-3c424.firebasestorage.app",
+            messagingSenderId: "477564303438",
+            appId: "1:477564303438:web:fceaa9ad2aa1be31046b1f"
+        };
+
+        // Inicializa Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Variáveis globais acessíveis via window para o HTML antigo funcionar
+        window.listaObras = [];
+        window.listaResponsaveis = [];
+        window.padProp = null;
+        window.padGerm = null;
+
+        // Referências das coleções
+        const obrasCol = collection(db, "obras");
+        const respCol = collection(db, "responsaveis");
+
+        // --- DADOS INICIAIS PARA MIGRAÇÃO (CASO O BANCO ESTEJA VAZIO) ---
+        const DADOS_INICIAIS_OBRAS = [
+            {
+                nome: "UBS Florabella",
+                contrato: "019/2025",
+                empresa: "TM8 CONSTRUTORA EIRELI",
+                objeto: "CONTRATAÇÃO DE EMPRESA ESPECIALIZADA PARA EXECUÇÃO DE SERVIÇOS DE CONSTRUÇÃO DE UMA UNIDADE BÁSICA DE SAÚDE (UBS)",
+                inicio: "2025-04-07",
+                termino: "2026-04-06",
+                ultimo_rdo: 0
+            }
+        ];
+        const DADOS_INICIAIS_RESP = [
+            {
+                nome: "Germano Jorge Francisco",
+                titulo: "Eng. Civil",
+                documento: "CREA-SP 506.968.487-8"
+            }
+        ];
+
+        // Função de migração automática
+        async function verificarMigracaoInicial() {
+            try {
+                const snapshotObras = await getDocs(obrasCol);
+                if (snapshotObras.empty) {
+                    console.log("Banco de obras vazio. Migrando dados iniciais...");
+                    const batch = writeBatch(db);
+                    DADOS_INICIAIS_OBRAS.forEach(obra => {
+                        const docRef = doc(obrasCol);
+                        batch.set(docRef, obra);
+                    });
+                    await batch.commit();
+                }
+
+                const snapshotResp = await getDocs(respCol);
+                if (snapshotResp.empty) {
+                    console.log("Banco de responsáveis vazio. Migrando dados iniciais...");
+                    const batch = writeBatch(db);
+                    DADOS_INICIAIS_RESP.forEach(resp => {
+                        const docRef = doc(respCol);
+                        batch.set(docRef, resp);
+                    });
+                    await batch.commit();
+                }
+            } catch (e) {
+                console.error("Erro na migração inicial:", e);
+            }
+        }
+
+        // --- CARREGAMENTO REAL-TIME (Substitui carregarListaUnificada) ---
+        function iniciarOuvintes() {
+            // Ouvinte de Obras
+            const qObras = query(obrasCol, orderBy("nome"));
+            onSnapshot(qObras, (snapshot) => {
+                window.listaObras = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                atualizarSelectObras();
+            }, (error) => {
+                console.error("Erro ao ouvir obras:", error);
+            });
+
+            // Ouvinte de Responsáveis
+            const qResp = query(respCol, orderBy("nome"));
+            onSnapshot(qResp, (snapshot) => {
+                window.listaResponsaveis = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                atualizarSelectResponsaveis();
+            }, (error) => {
+                console.error("Erro ao ouvir responsáveis:", error);
+            });
+        }
+
+        function atualizarSelectObras() {
+            const select = document.getElementById('seletorObra');
+            const valorAtual = select.value;
+            select.innerHTML = '<option value="">-- Escolha uma obra cadastrada --</option>';
+            window.listaObras.forEach(obra => {
+                const opt = document.createElement('option');
+                opt.value = obra.id;
+                opt.innerText = obra.nome;
+                select.appendChild(opt);
+            });
+            if (valorAtual) select.value = valorAtual;
+        }
+
+        function atualizarSelectResponsaveis() {
+            const selectResp = document.getElementById('seletorResponsavel');
+            const valorAtual = selectResp.value;
+            selectResp.innerHTML = '<option value="">-- Selecione o Responsável --</option>';
+            window.listaResponsaveis.forEach(resp => {
+                const opt = document.createElement('option');
+                opt.value = resp.id;
+                opt.innerText = resp.nome;
+                selectResp.appendChild(opt);
+            });
+            if (valorAtual) selectResp.value = valorAtual;
+        }
+
+        // --- FUNÇÕES EXPOSTAS NO GLOBAL ---
+
+        window.salvarNovaObra = async function () {
+            const nome = document.getElementById('cadNome').value;
+            const empresa = document.getElementById('cadEmpresa').value;
+
+            if (!nome || !empresa) { alert("Preencha pelo menos o Nome e a Empresa."); return; }
+
+            const novaObra = {
+                nome: nome,
+                empresa: empresa,
+                objeto: document.getElementById('cadObjeto').value,
+                contrato: document.getElementById('cadContrato').value,
+                inicio: document.getElementById('cadInicio').value,
+                termino: document.getElementById('cadTermino').value,
+                ultimo_rdo: 0
+            };
+
+            try {
+                await addDoc(obrasCol, novaObra);
+                alert("Obra Salva na Nuvem com Sucesso!");
+                document.getElementById('cadNome').value = "";
+                document.getElementById('cadEmpresa').value = "";
+                document.getElementById('cadObjeto').value = "";
+                document.getElementById('cadContrato').value = "";
+                document.getElementById('cadInicio').value = "";
+                document.getElementById('cadTermino').value = "";
+                window.toggleCadastro();
+            } catch (e) {
+                console.error("Erro ao salvar:", e);
+                alert("Erro ao salvar: " + e.message);
+            }
+        }
+
+        window.salvarNovoResponsavel = async function () {
+            const nome = document.getElementById('respNomeInput').value;
+            if (!nome) { alert("Preencha o Nome."); return; }
+
+            const novoResp = {
+                nome: nome,
+                titulo: document.getElementById('respTituloInput').value,
+                documento: document.getElementById('respDocInput').value
+            };
+
+            try {
+                await addDoc(respCol, novoResp);
+                alert("Responsável Salvo na Nuvem!");
+                document.getElementById('respNomeInput').value = "";
+                document.getElementById('respTituloInput').value = "";
+                document.getElementById('respDocInput').value = "";
+                window.toggleCadastroResponsavel();
+            } catch (e) {
+                console.error("Erro ao salvar:", e);
+                alert("Erro ao salvar: " + e.message);
+            }
+        }
+
+        window.carregarDadosObra = function (id) {
+            window.limparDadosContrato();
+            const obra = window.listaObras.find(o => o.id == id);
+
+            if (obra) {
+                document.getElementById('outObjeto').innerText = obra.objeto || '';
+                document.getElementById('outContrato').innerText = obra.contrato || '';
+                document.getElementById('outEmpresa').innerText = obra.empresa || '';
+
+                const dtInicio = obra.inicio ? window.formatarData(obra.inicio) : '';
+                const dtTermino = obra.termino ? window.formatarData(obra.termino) : '';
+
+                document.getElementById('outInicio').innerText = dtInicio;
+                document.getElementById('outTermino').innerText = dtTermino;
+
+                if (obra.termino) {
+                    const hoje = new Date();
+                    hoje.setHours(0, 0, 0, 0);
+                    const fim = new Date(obra.termino + 'T00:00:00');
+
+                    const diffTime = fim - hoje;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    const elDias = document.getElementById('diasFaltantes');
+                    if (diffDays < 0) {
+                        elDias.innerText = `VENCIDO HÁ ${Math.abs(diffDays)} DIAS`;
+                        elDias.style.color = 'red';
+                    } else {
+                        elDias.innerText = `${diffDays} dias restantes`;
+                        elDias.style.color = 'var(--primary)';
+                    }
+                } else {
+                    document.getElementById('diasFaltantes').innerText = "";
+                }
+
+                const proximoRDO = (obra.ultimo_rdo || 0) + 1;
+                document.getElementById('numRDO').value = proximoRDO;
+            }
+        }
+
+        window.atualizarContadorRDO = async function () {
+            const select = document.getElementById('seletorObra');
+            const obraId = select.value;
+            if (!obraId) return;
+
+            const obra = window.listaObras.find(o => o.id == obraId);
+            const numAtualInput = parseInt(document.getElementById('numRDO').value);
+
+            if (obra && numAtualInput > (obra.ultimo_rdo || 0)) {
+                try {
+                    const docRef = doc(db, "obras", obraId);
+                    await updateDoc(docRef, {
+                        ultimo_rdo: numAtualInput
+                    });
+                    console.log("Contador RDO atualizado para", numAtualInput);
+                } catch (e) {
+                    console.error("Erro ao atualizar RDO:", e);
+                }
+            }
+        }
+
+        verificarMigracaoInicial();
+        iniciarOuvintes();
+
+        window.toggleCadastro = function () {
+            const modal = document.getElementById('modalCadastro');
+            modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
+        }
+
+        window.toggleCadastroResponsavel = function () {
+            const modal = document.getElementById('modalCadastroResponsavel');
+            modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
+        }
+
+        window.formatarData = function (dataISO) {
+            if (!dataISO) return "";
+            const partes = dataISO.split('-');
+            if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+            return dataISO;
+        }
+
+        window.limparDadosContrato = function () {
+            ['outObjeto', 'outContrato', 'outEmpresa', 'outInicio', 'outTermino', 'diasFaltantes'].forEach(id => {
+                document.getElementById(id).innerText = '';
+            });
+            document.getElementById('numRDO').value = "1";
+        }
+
+    </script>
+
     <script>
-        let padProp, padGerm;
-        let listaObras = [];
-        let listaResponsaveis = [];
-
+        // Funções de UI
         window.onload = () => {
-            carregarListaUnificada();
-
             document.getElementById('dataAtual').valueAsDate = new Date();
-            document.getElementById('dataVisitaFinal').innerText = formatarData(document.getElementById('dataAtual').value);
+            document.getElementById('dataVisitaFinal').innerText = formatarDataUI(document.getElementById('dataAtual').value);
 
-            // Ajuste para canvas responsivo
             function resizeCanvas(canvas) {
                 const ratio = Math.max(window.devicePixelRatio || 1, 1);
                 canvas.width = canvas.offsetWidth * ratio;
@@ -662,129 +925,23 @@
             resizeCanvas(canvas1);
             resizeCanvas(canvas2);
 
-            padProp = new SignaturePad(canvas1);
-            padGerm = new SignaturePad(canvas2);
+            window.padProp = new SignaturePad(canvas1);
+            window.padGerm = new SignaturePad(canvas2);
 
             document.getElementById('dataAtual').addEventListener('change', function () {
-                document.getElementById('dataVisitaFinal').innerText = formatarData(this.value);
+                document.getElementById('dataVisitaFinal').innerText = formatarDataUI(this.value);
             });
         };
 
-        function carregarListaUnificada() {
-            // --- OBRAS ---
-            const obrasArquivo = (typeof BANCO_DE_OBRAS !== 'undefined') ? BANCO_DE_OBRAS : [];
-            const obrasLocal = JSON.parse(localStorage.getItem('minhasObrasExtras')) || [];
-            listaObras = [...obrasArquivo, ...obrasLocal];
-
-            const select = document.getElementById('seletorObra');
-            select.innerHTML = '<option value="">-- Escolha uma obra cadastrada --</option>';
-            listaObras.forEach(obra => {
-                const opt = document.createElement('option');
-                opt.value = obra.id;
-                opt.innerText = obra.nome;
-                select.appendChild(opt);
-            });
-
-            // --- RESPONSÁVEIS ---
-            const respArquivo = (typeof BANCO_DE_RESPONSAVEIS !== 'undefined') ? BANCO_DE_RESPONSAVEIS : [];
-            const respLocal = JSON.parse(localStorage.getItem('meusResponsaveisExtras')) || [];
-            listaResponsaveis = [...respArquivo, ...respLocal];
-
-            const selectResp = document.getElementById('seletorResponsavel');
-            selectResp.innerHTML = '<option value="">-- Selecione o Responsável --</option>';
-            listaResponsaveis.forEach(resp => {
-                const opt = document.createElement('option');
-                opt.value = resp.id;
-                opt.innerText = resp.nome;
-                selectResp.appendChild(opt);
-            });
-
-            if (obrasLocal.length > 0 || respLocal.length > 0) {
-                document.getElementById('btnBaixarJS').style.display = 'block';
-            }
-        }
-
-        function toggleCadastro() {
-            const modal = document.getElementById('modalCadastro');
-            modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
-        }
-
-        function salvarNovaObra() {
-            const nome = document.getElementById('cadNome').value;
-            const empresa = document.getElementById('cadEmpresa').value;
-
-            if (!nome || !empresa) { alert("Preencha pelo menos o Nome e a Empresa."); return; }
-
-            const novaObra = {
-                id: Date.now(),
-                nome: nome,
-                empresa: empresa,
-                objeto: document.getElementById('cadObjeto').value,
-                contrato: document.getElementById('cadContrato').value,
-                inicio: document.getElementById('cadInicio').value,
-                termino: document.getElementById('cadTermino').value
-            };
-
-            const obrasLocal = JSON.parse(localStorage.getItem('minhasObrasExtras')) || [];
-            obrasLocal.push(novaObra);
-            localStorage.setItem('minhasObrasExtras', JSON.stringify(obrasLocal));
-
-            alert("Obra Cadastrada! Ela ficará salva neste navegador.");
-            document.getElementById('cadNome').value = "";
-            toggleCadastro();
-            carregarListaUnificada();
-        }
-
-        function toggleCadastroResponsavel() {
-            const modal = document.getElementById('modalCadastroResponsavel');
-            modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
-        }
-
-        function salvarNovoResponsavel() {
-            const nome = document.getElementById('respNomeInput').value;
-            if (!nome) { alert("Preencha o Nome."); return; }
-
-            const novoResp = {
-                id: Date.now(),
-                nome: nome,
-                titulo: document.getElementById('respTituloInput').value,
-                documento: document.getElementById('respDocInput').value
-            };
-
-            const respLocal = JSON.parse(localStorage.getItem('meusResponsaveisExtras')) || [];
-            respLocal.push(novoResp);
-            localStorage.setItem('meusResponsaveisExtras', JSON.stringify(respLocal));
-
-            alert("Responsável Cadastrado!");
-            document.getElementById('respNomeInput').value = "";
-            document.getElementById('respTituloInput').value = "";
-            document.getElementById('respDocInput').value = "";
-            toggleCadastroResponsavel();
-            carregarListaUnificada();
-        }
-
-        function baixarArquivoJS() {
-            const conteudo = `/* BANCO DE DADOS ATUALIZADO EM ${new Date().toLocaleDateString()} */\n\n` +
-                `const BANCO_DE_OBRAS = ${JSON.stringify(listaObras, null, 4)};\n\n` +
-                `const BANCO_DE_RESPONSAVEIS = ${JSON.stringify(listaResponsaveis, null, 4)};`;
-
-            const blob = new Blob([conteudo], { type: "text/javascript" });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = "obras.js";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            if (confirm("Arquivo baixado! Deseja limpar a memória temporária do navegador? (Só faça isso após substituir o arquivo obras.js na pasta)")) {
-                localStorage.removeItem('minhasObrasExtras');
-                localStorage.removeItem('meusResponsaveisExtras');
-                location.reload();
-            }
+        function formatarDataUI(dataISO) {
+            if (!dataISO) return "";
+            const partes = dataISO.split('-');
+            if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+            return dataISO;
         }
 
         function carregarDadosResponsavel(id) {
-            const resp = listaResponsaveis.find(r => r.id == id);
+            const resp = window.listaResponsaveis.find(r => r.id == id);
             if (resp) {
                 document.getElementById('respNomeDisplay').innerText = resp.nome;
                 document.getElementById('respTituloDisplay').innerText = resp.titulo || '';
@@ -796,74 +953,54 @@
             }
         }
 
-        function carregarDadosObra(id) {
-            limparDadosContrato();
-            const obra = listaObras.find(o => o.id == id);
-            if (obra) {
-                document.getElementById('outObjeto').innerText = obra.objeto || '';
-                document.getElementById('outContrato').innerText = obra.contrato || '';
-                document.getElementById('outEmpresa').innerText = obra.empresa || '';
-                document.getElementById('outInicio').innerText = formatarData(obra.inicio);
-                document.getElementById('outTermino').innerText = formatarData(obra.termino);
-                document.getElementById('diasFaltantes').innerText = calcularDiasFaltantes(obra.termino);
+        function limparTudo() {
+            if (!confirm("Tem certeza que deseja limpar todo o formulário?")) return;
+            const inputs = document.querySelectorAll('input:not(.no-print), textarea');
+            inputs.forEach(input => input.value = "");
 
-                const diasTxt = document.getElementById('diasFaltantes').innerText;
-                document.getElementById('diasFaltantes').style.color = diasTxt.includes("Vencido") ? '#e74c3c' : 'var(--primary)';
+            document.getElementById('seletorObra').value = "";
+            document.getElementById('seletorResponsavel').value = "";
+            document.getElementById('clima').selectedIndex = 0;
+
+            window.limparDadosContrato();
+            document.getElementById('respNomeDisplay').innerText = "Selecione um Responsável";
+            document.getElementById('respTituloDisplay').innerText = "";
+            document.getElementById('respDocDisplay').innerText = "";
+
+            window.padProp.clear();
+            window.padGerm.clear();
+            document.getElementById('preview-container').innerHTML = "";
+
+            document.getElementById('dataAtual').valueAsDate = new Date();
+            document.getElementById('dataVisitaFinal').innerText = formatarDataUI(document.getElementById('dataAtual').value);
+        }
+
+        function limparAssinatura(tipo) {
+            if (tipo === 'proponente') window.padProp.clear();
+            if (tipo === 'germano') window.padGerm.clear();
+        }
+
+        function previewImages() {
+            const preview = document.getElementById('preview-container');
+            const fileInput = document.getElementById('fotos');
+            preview.innerHTML = "";
+            if (fileInput.files) {
+                const files = Array.from(fileInput.files).slice(0, 6);
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const div = document.createElement('div');
+                        div.className = 'photo-box';
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        div.appendChild(img);
+                        preview.appendChild(div);
+                    }
+                    reader.readAsDataURL(file);
+                });
             }
         }
 
-        function limparDadosContrato() {
-            ['outObjeto', 'outContrato', 'outEmpresa', 'outInicio', 'outTermino', 'diasFaltantes'].forEach(id => document.getElementById(id).innerText = '');
-        }
-
-        function calcularDiasFaltantes(dataTermino) {
-            if (!dataTermino) return '';
-            const diff = new Date(dataTermino + 'T00:00:00') - new Date();
-            const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
-            return dias < 0 ? `Vencido há ${Math.abs(dias)} dias` : (dias === 0 ? 'Vence Hoje!' : `${dias} dias`);
-        }
-
-        function formatarData(data) {
-            if (!data) return '';
-            const [ano, mes, dia] = data.split('-');
-            return `${dia}/${mes}/${ano}`;
-        }
-
-        function resizeAndCompressImage(file, maxWidth, quality) {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let w = img.width, h = img.height;
-                        if (w > maxWidth) { h *= maxWidth / w; w = maxWidth; }
-                        canvas.width = w; canvas.height = h;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, w, h);
-                        resolve(canvas.toDataURL('image/jpeg', quality));
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function previewImages() {
-            const container = document.getElementById('preview-container');
-            container.innerHTML = '';
-            const files = document.getElementById('fotos').files;
-            if (files.length > 6) alert("⚠️ Recomendamos no máximo 6 fotos.");
-            for (const file of Array.from(files)) {
-                const url = await resizeAndCompressImage(file, 800, 0.7);
-                const div = document.createElement('div');
-                div.className = 'photo-box';
-                div.innerHTML = `<img src="${url}">`;
-                container.appendChild(div);
-            }
-        }
-
-        function limparAssinatura(tipo) { tipo === 'proponente' ? padProp.clear() : padGerm.clear(); }
         function imprimirPDF() {
             if (!document.getElementById('outObjeto').innerText) { alert("⚠️ Selecione uma obra."); return; }
 
@@ -889,4 +1026,3 @@
 </body>
 
 </html>
-
