@@ -10,5 +10,13 @@ const BANCO_DE_OBRAS = [
         "inicio": "2025-04-07",
         "termino": "2026-04-06"
     },
-    
+];
+
+const BANCO_DE_RESPONSAVEIS = [
+    {
+        "id": 1,
+        "nome": "Germano Jorge Francisco",
+        "titulo": "Eng. Civil",
+        "documento": "CREA-SP 506.968.487-8"
+    }
 ];
