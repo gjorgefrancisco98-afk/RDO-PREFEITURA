@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RDO Profissional - ForAll Engenharia</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <script src="obras.js"></script>
+
+    <style>
+        :root { --primary: #1d3557; --secondary: #457b9d; --accent: #e63946; }
+        
+        /* ========== ESTILOS BASE (DESKTOP) ========== */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background: #e9ecef; margin: 0; padding: 20px 0; }
+        
+        /* O "Papel" na tela do computador */
+        #pdf-content { 
+            background: white; 
+            width: 210mm; 
+            margin: 0 auto; 
+            padding: 15mm; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        }
+
+        /* CABEÇALHO PADRÃO (Grid Horizontal) */
+        .header { 
+            display: grid; 
+            grid-template-columns: auto 1fr auto; 
+            align-items: center; 
+            gap: 20px; 
+            border-bottom: 2px solid var(--primary); 
+            padding-bottom: 15px; 
+            margin-bottom: 20px; 
+        }
+        
+        .logo { width: 130px; height: auto; display: block; }
+        .empresa-info { font-size: 10px; line-height: 1.5; color: #333; text-align: left; }
+        .doc-title { text-align: right; color: var(--primary); font-weight: bold; font-size: 16px; white-space: nowrap; }
+
+        /* Estrutura do Formulário */
+        .section-title { background: var(--primary); color: white; padding: 8px 12px; font-size: 12px; margin-top: 20px; margin-bottom: 10px; text-transform: uppercase; font-weight: bold; border-radius: 3px; }
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .full { grid-column: span 2; }
+        
+        label { display: block; font-size: 10px; font-weight: bold; color: var(--primary); margin-bottom: 3px; }
+        
+        /* Campos de input padrão */
+        .data-field { border: 1px solid #ddd; padding: 8px; font-size: 12px; min-height: 38px; background: #fafafa; border-radius: 3px; line-height: 1.4; display: flex; align-items: center; }
+        input, select, textarea { width: 100%; border: 1px solid #ccc; padding: 8px; font-size: 13px; border-radius: 3px; font-family: inherit; }
+        textarea { resize: vertical; }
+
+        /* Áreas visuais (Fotos e Assinatura) */
+        #preview-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 15px; margin-bottom: 15px; }
+        .photo-box { width: 100%; height: 65mm; border: 1px solid #ddd; overflow: hidden; border-radius: 4px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; }
+        .photo-box img { width: 100%; height: 100%; object-fit: cover; }
+        
+        .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30mm; margin-top: 30px; margin-bottom: 20px; text-align: center; }
+        .sig-wrapper { border-bottom: 2px solid #000; margin-bottom: 8px; height: 100px; background: #fff; }
+        canvas { width: 100%; height: 100px; touch-action: none; cursor: crosshair; }
+        .sig-label { font-size: 11px; color: #222; }
+
+        /* ========== ÁREA DE CONTROLES (Tela) ========== */
+        .no-print-area { max-width: 210mm; margin: 0 auto 20px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-left: 5px solid var(--secondary); }
+        .controles-superiores { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-bottom: 15px; }
+        
+        #modalCadastro { display: none; background: #f0f8ff; padding: 15px; border: 1px dashed var(--secondary); margin-top: 15px; border-radius: 5px; }
+        
+        .controls { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; z-index: 1000; background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: max-content; }
+        button { padding: 12px 25px; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; font-size: 14px; transition: all 0.3s; }
+        
+        .btn-pdf { background: #27ae60; color: white; }
+        .btn-clear { background: #e74c3c; color: white; }
+        .btn-new { background: var(--secondary); color: white; padding: 8px 15px; font-size: 12px; }
+        .btn-save-js { background: #e67e22; color: white; display: none; margin-top: 10px; width: 100%; padding: 10px; }
+        .btn-limpar-sig { background: #95a5a6; color: white; font-size: 11px; padding: 4px 8px; margin-top: 5px; border-radius: 4px; }
+
+        /* ========== MODO CELULAR (OTIMIZAÇÃO DE TELA) ========== */
+        /* Isso altera APENAS a visualização na tela, não a impressão */
+        @media screen and (max-width: 768px) {
+            body { padding: 10px; background: #f4f4f4; }
+            
+            /* Remove a largura fixa de papel e deixa fluido */
+            #pdf-content { width: 100%; padding: 15px; margin-bottom: 80px; /* Espaço p/ botões */ border-radius: 8px; }
+            .no-print-area { width: 100%; }
+
+            /* Cabeçalho Vertical para celular */
+            .header { display: flex; flex-direction: column; text-align: center; gap: 10px; }
+            .logo { margin: 0 auto; width: 100px; }
+            .empresa-info { text-align: center; font-size: 11px; }
+            .doc-title { text-align: center; font-size: 18px; margin-top: 5px; }
+
+            /* Transforma tudo em 1 coluna */
+            .grid, .signature-grid, #preview-container { grid-template-columns: 1fr; gap: 15px; }
+            .full { grid-column: span 1; }
+
+            /* Aumenta campos para toque */
+            input, select, textarea, .data-field { 
+                font-size: 16px; /* Evita zoom no iOS */
+                padding: 12px; 
+                min-height: 45px;
+            }
+            label { font-size: 12px; margin-bottom: 5px; }
+            
+            /* Ajuste dos controles */
+            .controls { width: 90%; justify-content: space-between; bottom: 15px; padding: 15px; }
+            .btn-pdf, .btn-clear { padding: 12px 10px; font-size: 13px; flex-grow: 1; }
+            .controles-superiores { flex-direction: column; align-items: stretch; }
+            .btn-new { width: 100%; margin-top: 10px; padding: 12px; }
+        }
+
+        /* ========== MODO IMPRESSÃO (O IMPORTANTE) ========== */
+        /* Aqui forçamos o layout a voltar ao padrão A4 rígido, ignorando o modo celular */
+        @media print {
+            @page { size: A4; margin: 10mm; }
+            body { background: white; margin: 0; padding: 0; }
+            
+            /* Restaura container A4 */
+            #pdf-content { 
+                width: 100%; 
+                margin: 0; 
+                padding: 0; 
+                box-shadow: none; 
+                border-radius: 0;
+            }
+
+            /* Restaura Grid do Cabeçalho para ficar alinhado */
+            .header { 
+                display: grid !important; 
+                grid-template-columns: auto 1fr auto !important; 
+                align-items: center !important;
+                gap: 20px !important;
+                text-align: left !important;
+                border-bottom: 2px solid var(--primary) !important;
+            }
+            .logo { margin: 0 !important; width: 130px !important; }
+            .empresa-info { text-align: left !important; font-size: 10px !important; }
+            .doc-title { text-align: right !important; font-size: 16px !important; }
+
+            /* Restaura colunas duplas */
+            .grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+            .full { grid-column: span 2 !important; }
+            .signature-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 30mm !important; }
+            #preview-container { display: grid !important; grid-template-columns: 1fr 1fr !important; }
+            
+            /* Esconde elementos de interface */
+            .no-print, .no-print-area, .controls, .btn-limpar-sig { display: none !important; }
+            
+            /* Cores e quebras */
+            .section-title { background: var(--primary) !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .section-title, .photo-box, .sig-wrapper { page-break-inside: avoid; }
+            
+            /* Fontes pequenas de volta */
+            input, select, textarea, .data-field { font-size: 12px !important; padding: 8px !important; min-height: 0 !important; border: 1px solid #ccc !important; }
+            label { font-size: 10px !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print-area">
+    <div class="controles-superiores">
+        <div style="flex-grow: 1;">
+            <h3 style="margin-bottom: 5px; color: var(--primary);">⚙️ Seleção de Obra</h3>
+            <select id="seletorObra" onchange="carregarDadosObra(this.value)">
+                <option value="">-- Escolha uma obra cadastrada --</option>
+            </select>
+        </div>
+        <button class="btn-new" onclick="toggleCadastro()">➕ Nova Obra</button>
+    </div>
+
+    <div id="modalCadastro">
+        <h4>Cadastrar Nova Obra</h4>
+        <div class="grid">
+            <div class="full"><input type="text" id="cadNome" placeholder="Nome Curto (ex: UBS Florabella)"></div>
+            <div class="full"><input type="text" id="cadEmpresa" placeholder="Empresa / Cliente"></div>
+            <div class="full"><input type="text" id="cadObjeto" placeholder="Objeto (Descrição do serviço)"></div>
+            <div><input type="text" id="cadContrato" placeholder="Nº Contrato"></div>
+            <div></div> <div><label>Início:</label><input type="date" id="cadInicio"></div>
+            <div><label>Término:</label><input type="date" id="cadTermino"></div>
+        </div>
+        <div style="text-align: right; margin-top: 10px;">
+            <button onclick="salvarNovaObra()" style="background: var(--primary); color: white;">💾 Salvar Obra</button>
+            <button onclick="toggleCadastro()" style="background: #999; color: white; padding: 12px 25px;">Cancelar</button>
+        </div>
+    </div>
+
+    <button id="btnBaixarJS" class="btn-save-js" onclick="baixarArquivoJS()">
+        ⚠️ Obras novas na memória! Baixar "obras.js" atualizado.
+    </button>
+</div>
+
+<div id="pdf-content">
+    <div class="header">
+        <img src="https://www.holambra.sp.gov.br/images/logo.png" class="logo" alt="Logo Prefeitura Municipal de Holambra">
+        
+        <div class="empresa-info">
+            <strong>PREFEITURA MUNICIPAL DA ESTÂNCIA TURÍSTICA DE HIOLAMBRA</strong><br>
+            CNPJ 67.172.437/0001-83<br>
+            Al. Mauricio de Nassau, 444, Holambra - SP | (19) 3802-8000<br>
+            diretoria.obras@holambra.sp.gov.br
+        </div>
+        
+        <div class="doc-title">DIÁRIO DE OBRA</div>
+    </div>
+
+    <div class="section-title">Dados do Contrato</div>
+    <div class="grid">
+        <div><label>Nº do Relatório (RDO):</label><input type="number" id="numRDO" min="1" value="1"></div>
+        <div><label>Prazo / Vencimento:</label><div id="diasFaltantes" class="data-field" style="font-weight: bold;"></div></div>
+        <div class="full"><label>Objeto/Obra:</label><div id="outObjeto" class="data-field"></div></div>
+        <div><label>Nº Contrato:</label><div id="outContrato" class="data-field"></div></div>
+        <div><label>Empresa:</label><div id="outEmpresa" class="data-field"></div></div>
+        <div><label>Data Início:</label><div id="outInicio" class="data-field"></div></div>
+        <div><label>Previsão Término:</label><div id="outTermino" class="data-field"></div></div>
+    </div>
+
+    <div class="section-title">Relatório de Visita</div>
+    <div class="grid">
+        <div><label>Data:</label><input type="date" id="dataAtual"></div>
+        <div>
+            <label>Clima:</label>
+            <select id="clima">
+                <option>Ensolarado</option>
+                <option>Nublado</option>
+                <option>Chuvoso (Trabalhável)</option>
+                <option>Chuvoso (Interrompido)</option>
+            </select>
+        </div>
+        <div><label>Efetivo (Funcionários):</label><input type="number" id="efetivo" min="0"></div>
+        <div class="full"><label>Atividades em Execução:</label><textarea id="atividades" rows="4"></textarea></div>
+        <div class="full"><label>Observações:</label><textarea id="obs" rows="3"></textarea></div>
+    </div>
+
+    <div class="section-title">Registro Fotográfico</div>
+    <div class="no-print" style="padding: 10px 0;">
+        <input type="file" id="fotos" accept="image/*" multiple onchange="previewImages()" style="padding: 10px; background: #eee;">
+        <div style="color: #666; font-size: 11px; margin-top: 5px;">Recomendado: Máximo 6 fotos.</div>
+    </div>
+    <div id="preview-container"></div>
+
+    <div class="signature-grid">
+        <div>
+            <div class="sig-wrapper"><canvas id="sig-proponente"></canvas></div>
+            <button class="btn-limpar-sig no-print" onclick="limparAssinatura('proponente')">🗑️ Limpar</button>
+            <div class="sig-label">
+                <span id="outProponenteLabel">Entreposto</span>
+                <input type="text" id="entreposto" placeholder="Nome do Responsável" class="no-print" style="margin-top: 5px;" oninput="document.getElementById('outProponenteLabel').innerText = this.value || 'Entreposto'">
+            </div>
+        </div>
+        <div>
+            <div class="sig-wrapper"><canvas id="sig-germano"></canvas></div>
+            <button class="btn-limpar-sig no-print" onclick="limparAssinatura('germano')">🗑️ Limpar</button>
+            <div class="sig-label"><strong>Germano Jorge Francisco</strong><br>Eng. Civil | CREA-SP 506.968.487-8</div>
+        </div>
+    </div>
+    <div style="text-align: right; margin-top: 20px; font-size: 10px; color: #555;">Data da Visita Técnica: <span id="dataVisitaFinal"></span></div>
+</div>
+
+<div class="controls">
+    <button class="btn-clear" onclick="limparTudo()">🗑️ Limpar</button>
+    <button class="btn-pdf" onclick="imprimirPDF()">📄 GERAR PDF</button>
+</div>
+
+<script>
+    let padProp, padGerm;
+    let listaObras = []; 
+
+    window.onload = () => {
+        carregarListaUnificada();
+        
+        document.getElementById('dataAtual').valueAsDate = new Date();
+        document.getElementById('dataVisitaFinal').innerText = formatarData(document.getElementById('dataAtual').value);
+        
+        // Ajuste para canvas responsivo
+        function resizeCanvas(canvas) {
+            const ratio =  Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+        }
+
+        const canvas1 = document.getElementById('sig-proponente');
+        const canvas2 = document.getElementById('sig-germano');
+        resizeCanvas(canvas1);
+        resizeCanvas(canvas2);
+        
+        padProp = new SignaturePad(canvas1);
+        padGerm = new SignaturePad(canvas2);
+
+        document.getElementById('dataAtual').addEventListener('change', function() {
+            document.getElementById('dataVisitaFinal').innerText = formatarData(this.value);
+        });
+    };
+
+    function carregarListaUnificada() {
+        const obrasArquivo = (typeof BANCO_DE_OBRAS !== 'undefined') ? BANCO_DE_OBRAS : [];
+        const obrasLocal = JSON.parse(localStorage.getItem('minhasObrasExtras')) || [];
+        listaObras = [...obrasArquivo, ...obrasLocal];
+        
+        const select = document.getElementById('seletorObra');
+        select.innerHTML = '<option value="">-- Escolha uma obra cadastrada --</option>';
+        listaObras.forEach(obra => {
+            const opt = document.createElement('option');
+            opt.value = obra.id;
+            opt.innerText = obra.nome;
+            select.appendChild(opt);
+        });
+
+        if (obrasLocal.length > 0) {
+            document.getElementById('btnBaixarJS').style.display = 'block';
+        }
+    }
+
+    function toggleCadastro() {
+        const modal = document.getElementById('modalCadastro');
+        modal.style.display = (modal.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function salvarNovaObra() {
+        const nome = document.getElementById('cadNome').value;
+        const empresa = document.getElementById('cadEmpresa').value;
+        
+        if (!nome || !empresa) { alert("Preencha pelo menos o Nome e a Empresa."); return; }
+
+        const novaObra = {
+            id: Date.now(),
+            nome: nome,
+            empresa: empresa,
+            objeto: document.getElementById('cadObjeto').value,
+            contrato: document.getElementById('cadContrato').value,
+            inicio: document.getElementById('cadInicio').value,
+            termino: document.getElementById('cadTermino').value
+        };
+
+        const obrasLocal = JSON.parse(localStorage.getItem('minhasObrasExtras')) || [];
+        obrasLocal.push(novaObra);
+        localStorage.setItem('minhasObrasExtras', JSON.stringify(obrasLocal));
+
+        alert("Obra Cadastrada! Ela ficará salva neste navegador.");
+        document.getElementById('cadNome').value = "";
+        toggleCadastro();
+        carregarListaUnificada();
+    }
+
+    function baixarArquivoJS() {
+        const conteudo = `/* BANCO DE DADOS ATUALIZADO EM ${new Date().toLocaleDateString()} */\n\nconst BANCO_DE_OBRAS = ${JSON.stringify(listaObras, null, 4)};`;
+        const blob = new Blob([conteudo], { type: "text/javascript" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "obras.js";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        if(confirm("Arquivo baixado! Deseja limpar a memória temporária do navegador? (Só faça isso após substituir o arquivo obras.js na pasta)")) {
+            localStorage.removeItem('minhasObrasExtras');
+            location.reload();
+        }
+    }
+
+    function carregarDadosObra(id) {
+        limparDadosContrato();
+        const obra = listaObras.find(o => o.id == id);
+        if(obra) {
+            document.getElementById('outObjeto').innerText = obra.objeto || '';
+            document.getElementById('outContrato').innerText = obra.contrato || '';
+            document.getElementById('outEmpresa').innerText = obra.empresa || '';
+            document.getElementById('outInicio').innerText = formatarData(obra.inicio);
+            document.getElementById('outTermino').innerText = formatarData(obra.termino);
+            document.getElementById('diasFaltantes').innerText = calcularDiasFaltantes(obra.termino);
+            
+            const diasTxt = document.getElementById('diasFaltantes').innerText;
+            document.getElementById('diasFaltantes').style.color = diasTxt.includes("Vencido") ? '#e74c3c' : 'var(--primary)';
+        }
+    }
+
+    function limparDadosContrato() {
+        ['outObjeto', 'outContrato', 'outEmpresa', 'outInicio', 'outTermino', 'diasFaltantes'].forEach(id => document.getElementById(id).innerText = '');
+    }
+
+    function calcularDiasFaltantes(dataTermino) {
+        if (!dataTermino) return '';
+        const diff = new Date(dataTermino + 'T00:00:00') - new Date();
+        const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return dias < 0 ? `Vencido há ${Math.abs(dias)} dias` : (dias === 0 ? 'Vence Hoje!' : `${dias} dias`);
+    }
+
+    function formatarData(data) {
+        if(!data) return '';
+        const [ano, mes, dia] = data.split('-');
+        return `${dia}/${mes}/${ano}`;
+    }
+
+    function resizeAndCompressImage(file, maxWidth, quality) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let w = img.width, h = img.height;
+                    if (w > maxWidth) { h *= maxWidth / w; w = maxWidth; }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function previewImages() {
+        const container = document.getElementById('preview-container');
+        container.innerHTML = '';
+        const files = document.getElementById('fotos').files;
+        if(files.length > 6) alert("⚠️ Recomendamos no máximo 6 fotos.");
+        for (const file of Array.from(files)) {
+            const url = await resizeAndCompressImage(file, 800, 0.7);
+            const div = document.createElement('div');
+            div.className = 'photo-box';
+            div.innerHTML = `<img src="${url}">`;
+            container.appendChild(div);
+        }
+    }
+
+    function limparAssinatura(tipo) { tipo === 'proponente' ? padProp.clear() : padGerm.clear(); }
+    function imprimirPDF() {
+        if(!document.getElementById('outObjeto').innerText) { alert("⚠️ Selecione uma obra."); return; }
+        window.print();
+    }
+    function limparTudo() { if(confirm("Limpar formulário?")) window.location.reload(); }
+</script>
+</body>
+</html>
